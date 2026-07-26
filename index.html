@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex do Tempo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Spectral:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+  :root{
+    --ink: #0a0c11;
+    --panel: #12151d;
+    --panel-2: #191d27;
+    --line: #2a2f3c;
+    --parchment: #cdb989;
+    --copper: #c17f43;
+    --verdigris: #5c8a80;
+    --text: #e9e3d3;
+    --muted: #8b8a7e;
+    --crimson: #9a4444;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0; padding:0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: 'Spectral', Georgia, serif;
+    min-height: 100vh;
+  }
+
+  body{
+    padding: 32px 20px 60px;
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(92,138,128,0.08), transparent 60%),
+      radial-gradient(circle at 100% 100%, rgba(193,127,67,0.06), transparent 55%);
+  }
+
+  .wrap{ max-width: 620px; margin: 0 auto; }
+
+  header{
+    text-align:center;
+    margin-bottom: 28px;
+  }
+
+  .eyebrow{
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--verdigris);
+    text-transform: uppercase;
+  }
+
+  h1{
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 700;
+    font-size: 42px;
+    margin: 4px 0 6px;
+    letter-spacing: 1px;
+    color: var(--parchment);
+  }
+
+  .campaign-name{
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 17px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 1px dashed var(--line);
+    text-align: center;
+    width: 100%;
+    max-width: 340px;
+    padding: 4px 2px;
+    outline: none;
+  }
+  .campaign-name:focus{ border-bottom-color: var(--copper); color: var(--text); }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 28px;
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .panel::before{
+    content:'';
+    position:absolute; inset: 6px;
+    border: 1px solid rgba(205,185,137,0.08);
+    border-radius: 2px;
+    pointer-events:none;
+  }
+
+  /* --- Dial --- */
+  .dial-row{ display:flex; flex-direction:column; align-items:center; gap: 14px; }
+
+  .dial-svg{ width: 260px; height: 260px; }
+
+  .time-readout{
+    font-family: 'Space Mono', monospace;
+    font-size: 40px;
+    letter-spacing: 2px;
+    color: var(--parchment);
+    text-align:center;
+    line-height:1;
+  }
+  .time-readout .sep{ color: var(--copper); }
+
+  .day-line{
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 19px;
+    color: var(--text);
+    text-align:center;
+  }
+  .day-line .day-num{ color: var(--copper); font-weight:700; }
+
+  .period-label{
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--verdigris);
+  }
+
+  /* --- Manual edit --- */
+  .manual-edit{
+    display:flex; gap:8px; justify-content:center; align-items:center;
+    margin-top: 4px; flex-wrap: wrap;
+  }
+  .manual-edit label{ font-size: 11px; color: var(--muted); font-family:'Space Mono',monospace; }
+  .manual-edit input{
+    width: 56px;
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    padding: 5px 6px;
+    border-radius: 3px;
+    text-align:center;
+  }
+  .manual-edit button{
+    background: none;
+    border: 1px solid var(--verdigris);
+    color: var(--verdigris);
+    font-family:'Space Mono',monospace;
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor:pointer;
+    letter-spacing:1px;
+  }
+  .manual-edit button:hover{ background: rgba(92,138,128,0.12); }
+
+  /* --- Controls --- */
+  .section-title{
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-title::after{
+    content:''; flex:1; height:1px; background: var(--line);
+  }
+
+  .advance-grid{
+    display:flex; flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .btn{
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12.5px;
+    padding: 9px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+    flex: 1 1 auto;
+    min-width: 64px;
+  }
+  .btn:hover{ border-color: var(--copper); color: var(--parchment); }
+
+  .btn.primary{
+    border-color: var(--copper);
+    color: var(--copper);
+  }
+  .btn.primary:hover{ background: rgba(193,127,67,0.1); }
+
+  .custom-advance{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  }
+  .custom-advance input{
+    width: 64px;
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    padding: 8px 6px;
+    border-radius: 3px;
+    text-align:center;
+  }
+  .custom-advance label{
+    font-size: 11px; color: var(--muted); font-family:'Space Mono',monospace;
+  }
+
+  /* --- Log --- */
+  .log-form{ display:flex; gap:8px; margin-bottom: 16px; }
+  .log-form input{
+    flex:1;
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'Spectral', serif;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 3px;
+  }
+  .log-form input:focus{ outline:none; border-color: var(--verdigris); }
+
+  .log-list{ list-style:none; margin:0; padding:0; max-height: 280px; overflow-y:auto; }
+  .log-list li{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .log-list li:last-child{ border-bottom: none; }
+  .log-meta{
+    font-family:'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--verdigris);
+    white-space: nowrap;
+    padding-top: 2px;
+  }
+  .log-text{ flex:1; font-size: 14.5px; line-height:1.4; }
+  .log-del{
+    background:none; border:none; color: var(--crimson);
+    cursor:pointer; font-size: 14px; padding: 0 4px;
+    font-family: serif;
+  }
+  .log-del:hover{ opacity:0.7; }
+  .log-empty{ color: var(--muted); font-style: italic; font-size: 14px; text-align:center; padding: 10px 0; }
+
+  .footer-row{ display:flex; justify-content:space-between; align-items:center; }
+  .reset-btn{
+    background:none; border: none; color: var(--muted);
+    font-family:'Space Mono', monospace; font-size: 11px;
+    cursor:pointer; text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .reset-btn:hover{ color: var(--crimson); }
+
+  .status{
+    font-family:'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-align:center;
+    min-height: 16px;
+  }
+
+  @media (max-width: 480px){
+    h1{ font-size: 32px; }
+    .dial-svg{ width: 210px; height: 210px; }
+    .time-readout{ font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">— registro cronológico —</div>
+    <h1>Codex do Tempo</h1>
+    <input class="campaign-name" id="campaignName" placeholder="nome da campanha" maxlength="60">
+  </header>
+
+  <div class="panel">
+    <div class="dial-row">
+      <svg class="dial-svg" id="dialSvg" viewBox="0 0 260 260"></svg>
+      <div class="time-readout" id="timeReadout">--<span class="sep">:</span>--</div>
+      <div class="day-line">Dia <span class="day-num" id="dayNum">1</span></div>
+      <div class="period-label" id="periodLabel">—</div>
+
+      <div class="manual-edit">
+        <label>DIA</label><input type="number" id="editDay" min="1">
+        <label>H</label><input type="number" id="editHour" min="0" max="23">
+        <label>M</label><input type="number" id="editMin" min="0" max="59">
+        <button id="applyManual">definir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Avançar o tempo</div>
+    <div class="advance-grid">
+      <button class="btn" data-min="10">+10 min</button>
+      <button class="btn" data-min="30">+30 min</button>
+      <button class="btn" data-min="60">+1 hora</button>
+      <button class="btn" data-min="240">+4 horas</button>
+      <button class="btn" data-min="480">+8 horas (descanso)</button>
+      <button class="btn primary" id="nextDayBtn">próximo dia ↦</button>
+    </div>
+    <div class="custom-advance">
+      <label>avançar</label>
+      <input type="number" id="customHours" min="0" placeholder="h" value="0">
+      <label>h</label>
+      <input type="number" id="customMinutes" min="0" placeholder="min" value="0">
+      <label>min</label>
+      <button class="btn" id="customAdvanceBtn" style="flex:none;">aplicar</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Registro de eventos</div>
+    <div class="log-form">
+      <input type="text" id="logInput" placeholder="o que aconteceu agora..." maxlength="200">
+      <button class="btn primary" id="logAddBtn" style="flex:none;">anotar</button>
+    </div>
+    <ul class="log-list" id="logList"></ul>
+  </div>
+
+  <div class="footer-row">
+    <div class="status" id="statusMsg"></div>
+    <button class="reset-btn" id="resetBtn">reiniciar relógio</button>
+  </div>
+
+</div>
+
+<script>
+const STORAGE_KEY = 'codex-do-tempo:state';
+
+let state = {
+  campaignName: '',
+  day: 1,
+  hour: 8,
+  minute: 0,
+  events: [] // {id, day, hour, minute, text}
+};
+
+const $ = id => document.getElementById(id);
+const statusMsg = $('statusMsg');
+
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function periodOf(hour){
+  if(hour >= 5 && hour < 8) return { label: 'Alvorada', icon:'dawn' };
+  if(hour >= 8 && hour < 12) return { label: 'Manhã', icon:'day' };
+  if(hour >= 12 && hour < 17) return { label: 'Tarde', icon:'day' };
+  if(hour >= 17 && hour < 20) return { label: 'Crepúsculo', icon:'dusk' };
+  return { label: 'Noite', icon:'night' };
+}
+
+function skyColors(hour, minute){
+  const t = hour + minute/60;
+  // gradient stops keyed by hour of day
+  const stops = [
+    {h:0,  c1:'#0a0c16', c2:'#171d2c'},
+    {h:5,  c1:'#1c2440', c2:'#3a3552'},
+    {h:7,  c1:'#5a4a5e', c2:'#c17f43'},
+    {h:9,  c1:'#2b5a72', c2:'#6fa3b8'},
+    {h:16, c1:'#2b5a72', c2:'#6fa3b8'},
+    {h:18, c1:'#5c3a4a', c2:'#c17f43'},
+    {h:20, c1:'#171d2c', c2:'#2a2545'},
+    {h:24, c1:'#0a0c16', c2:'#171d2c'}
+  ];
+  for(let i=0;i<stops.length-1;i++){
+    const a = stops[i], b = stops[i+1];
+    if(t >= a.h && t <= b.h){
+      const f = (t - a.h) / (b.h - a.h || 1);
+      return { c1: lerpColor(a.c1,b.c1,f), c2: lerpColor(a.c2,b.c2,f) };
+    }
+  }
+  return { c1: stops[0].c1, c2: stops[0].c2 };
+}
+
+function lerpColor(c1, c2, f){
+  const a = hexToRgb(c1), b = hexToRgb(c2);
+  const r = Math.round(a.r + (b.r-a.r)*f);
+  const g = Math.round(a.g + (b.g-a.g)*f);
+  const bl = Math.round(a.b + (b.b-a.b)*f);
+  return `rgb(${r},${g},${bl})`;
+}
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  return { r: parseInt(hex.substring(0,2),16), g: parseInt(hex.substring(2,4),16), b: parseInt(hex.substring(4,6),16) };
+}
+
+function renderDial(){
+  const cx=130, cy=130, r=104;
+  const angle = ((state.hour + state.minute/60) / 24) * 360 - 90;
+  const rad = angle * Math.PI/180;
+  const markerX = cx + r * Math.cos(rad);
+  const markerY = cy + r * Math.sin(rad);
+  const sky = skyColors(state.hour, state.minute);
+
+  let ticks = '';
+  for(let h=0; h<24; h++){
+    const a = (h/24)*360 - 90;
+    const ra = a * Math.PI/180;
+    const isMajor = h % 6 === 0;
+    const rOuter = r + (isMajor ? 10 : 5);
+    const rInner = r + (isMajor ? 2 : 2);
+    const x1 = cx + rInner*Math.cos(ra), y1 = cy + rInner*Math.sin(ra);
+    const x2 = cx + rOuter*Math.cos(ra), y2 = cy + rOuter*Math.sin(ra);
+    ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${isMajor ? '#cdb989':'#5c5940'}" stroke-width="${isMajor?2:1}" opacity="${isMajor?0.9:0.5}"/>`;
+  }
+
+  const isNight = state.hour >= 20 || state.hour < 5;
+  const markerGlyph = isNight
+    ? `<circle cx="${markerX}" cy="${markerY}" r="7" fill="#e9e3d3"/><circle cx="${markerX+2.5}" cy="${markerY-2}" r="6" fill="url(#skyGrad)"/>`
+    : `<circle cx="${markerX}" cy="${markerY}" r="8" fill="#f2c879"/>`;
+
+  $('dialSvg').innerHTML = `
+    <defs>
+      <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${sky.c1}"/>
+        <stop offset="100%" stop-color="${sky.c2}"/>
+      </linearGradient>
+      <radialGradient id="rim" cx="50%" cy="50%" r="50%">
+        <stop offset="80%" stop-color="transparent"/>
+        <stop offset="100%" stop-color="#c17f43" stop-opacity="0.4"/>
+      </radialGradient>
+    </defs>
+    <circle cx="${cx}" cy="${cy}" r="${r+14}" fill="none" stroke="#2a2f3c" stroke-width="1"/>
+    <circle cx="${cx}" cy="${cy}" r="${r-6}" fill="url(#skyGrad)" stroke="#c17f43" stroke-width="1.5"/>
+    ${ticks}
+    <circle cx="${cx}" cy="${cy}" r="${r+14}" fill="url(#rim)"/>
+    <line x1="${cx}" y1="${cy}" x2="${markerX}" y2="${markerY}" stroke="#c17f43" stroke-width="1.5" opacity="0.7"/>
+    ${markerGlyph}
+    <circle cx="${cx}" cy="${cy}" r="3" fill="#cdb989"/>
+  `;
+}
+
+function renderClockText(){
+  $('timeReadout').innerHTML = `${pad(state.hour)}<span class="sep">:</span>${pad(state.minute)}`;
+  $('dayNum').textContent = state.day;
+  const p = periodOf(state.hour);
+  $('periodLabel').textContent = p.label;
+  $('editDay').value = state.day;
+  $('editHour').value = state.hour;
+  $('editMin').value = state.minute;
+  $('campaignName').value = state.campaignName;
+}
+
+function renderLog(){
+  const list = $('logList');
+  if(state.events.length === 0){
+    list.innerHTML = `<li class="log-empty">nenhum evento registrado ainda</li>`;
+    return;
+  }
+  const sorted = [...state.events].sort((a,b) => b.order - a.order);
+  list.innerHTML = sorted.map(ev => `
+    <li>
+      <div style="display:flex; gap:12px; align-items:flex-start; flex:1;">
+        <span class="log-meta">D${ev.day} ${pad(ev.hour)}:${pad(ev.minute)}</span>
+        <span class="log-text">${escapeHtml(ev.text)}</span>
+      </div>
+      <button class="log-del" data-id="${ev.id}" title="remover">✕</button>
+    </li>
+  `).join('');
+  list.querySelectorAll('.log-del').forEach(btn => {
+    btn.addEventListener('click', () => removeEvent(btn.dataset.id));
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderAll(){
+  renderDial();
+  renderClockText();
+  renderLog();
+}
+
+function normalizeTime(){
+  while(state.minute >= 60){ state.minute -= 60; state.hour += 1; }
+  while(state.minute < 0){ state.minute += 60; state.hour -= 1; }
+  while(state.hour >= 24){ state.hour -= 24; state.day += 1; }
+  while(state.hour < 0){ state.hour += 24; state.day -= 1; }
+  if(state.day < 1) state.day = 1;
+}
+
+async function save(){
+  try{
+    statusMsg.textContent = 'salvando...';
+    const res = await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    if(!res){ statusMsg.textContent = 'falha ao salvar'; return; }
+    statusMsg.textContent = 'salvo';
+    setTimeout(() => { if(statusMsg.textContent === 'salvo') statusMsg.textContent=''; }, 1200);
+  }catch(e){
+    console.error(e);
+    statusMsg.textContent = 'erro ao salvar';
+  }
+}
+
+async function load(){
+  try{
+    statusMsg.textContent = 'carregando...';
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      state = Object.assign(state, parsed);
+      if(!Array.isArray(state.events)) state.events = [];
+    }
+    statusMsg.textContent = '';
+  }catch(e){
+    statusMsg.textContent = '';
+  }
+  renderAll();
+}
+
+function advance(totalMinutes){
+  state.minute += totalMinutes;
+  normalizeTime();
+  renderAll();
+  save();
+}
+
+function removeEvent(id){
+  state.events = state.events.filter(ev => ev.id !== id);
+  renderLog();
+  save();
+}
+
+let eventOrder = Date.now();
+
+document.querySelectorAll('.advance-grid .btn[data-min]').forEach(btn => {
+  btn.addEventListener('click', () => advance(parseInt(btn.dataset.min,10)));
+});
+
+$('nextDayBtn').addEventListener('click', () => {
+  state.day += 1;
+  state.hour = 6;
+  state.minute = 0;
+  renderAll();
+  save();
+});
+
+$('customAdvanceBtn').addEventListener('click', () => {
+  const h = parseInt($('customHours').value,10) || 0;
+  const m = parseInt($('customMinutes').value,10) || 0;
+  if(h===0 && m===0) return;
+  advance(h*60 + m);
+  $('customHours').value = 0;
+  $('customMinutes').value = 0;
+});
+
+$('applyManual').addEventListener('click', () => {
+  const d = parseInt($('editDay').value,10);
+  const h = parseInt($('editHour').value,10);
+  const m = parseInt($('editMin').value,10);
+  if(!isNaN(d)) state.day = Math.max(1,d);
+  if(!isNaN(h)) state.hour = ((h % 24)+24)%24;
+  if(!isNaN(m)) state.minute = ((m % 60)+60)%60;
+  renderAll();
+  save();
+});
+
+$('campaignName').addEventListener('change', () => {
+  state.campaignName = $('campaignName').value;
+  save();
+});
+
+$('logAddBtn').addEventListener('click', addLogEntry);
+$('logInput').addEventListener('keydown', e => { if(e.key === 'Enter') addLogEntry(); });
+
+function addLogEntry(){
+  const text = $('logInput').value.trim();
+  if(!text) return;
+  state.events.push({
+    id: 'ev_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    day: state.day, hour: state.hour, minute: state.minute,
+    text, order: eventOrder++
+  });
+  $('logInput').value = '';
+  renderLog();
+  save();
+}
+
+$('resetBtn').addEventListener('click', () => {
+  if(!confirm('Reiniciar o relógio para Dia 1, 08:00 e apagar todos os eventos?')) return;
+  state = { campaignName: state.campaignName, day: 1, hour: 8, minute: 0, events: [] };
+  renderAll();
+  save();
+});
+
+load();
+</script>
+</body>
+</html>
