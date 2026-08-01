@@ -266,6 +266,37 @@
     min-height: 16px;
   }
 
+  .backup-panel{ padding: 22px 28px; }
+  .backup-hint{
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin: 0 0 14px;
+  }
+  .backup-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .toast{
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    background: var(--panel-2);
+    border: 1px solid var(--copper);
+    color: var(--parchment);
+    font-family: 'Space Mono', monospace;
+    font-size: 12.5px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+    z-index: 50;
+    max-width: 88vw;
+    text-align: center;
+  }
+  .toast.show{ opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
   @media (max-width: 480px){
     h1{ font-size: 32px; }
     .dial-svg{ width: 210px; height: 210px; }
@@ -327,6 +358,20 @@
     <ul class="log-list" id="logList"></ul>
   </div>
 
+  <div class="panel backup-panel">
+    <div class="section-title">Backup entre dispositivos</div>
+    <p class="backup-hint">
+      Os dados ficam salvos neste navegador/dispositivo automaticamente. Para levar o
+      registro para outro celular ou computador, exporte um arquivo de backup aqui e
+      importe-o lá.
+    </p>
+    <div class="backup-actions">
+      <button class="btn" id="exportBtn">⇩ exportar backup (.json)</button>
+      <button class="btn" id="importBtn">⇧ importar backup</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </div>
+
   <div class="footer-row">
     <div class="status" id="statusMsg"></div>
     <button class="reset-btn" id="resetBtn">reiniciar relógio</button>
@@ -334,8 +379,170 @@
 
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
+/* =========================================================================
+   PERSISTÊNCIA
+   ---------------------------------------------------------------------
+   Guarda o estado em múltiplas camadas locais no dispositivo (localStorage
+   + IndexedDB), com rotação de backups automáticos, para que os dados
+   sobrevivam ao fechar a aba, o navegador, ou reiniciar o aparelho —
+   funciona offline, em Android, iPhone ou desktop, sem servidor.
+
+   Como isso NÃO é sincronizado entre aparelhos diferentes (não há backend),
+   o botão "exportar/importar backup" serve para levar os dados de um
+   dispositivo para outro manualmente (ex: exportar no celular, importar
+   no notebook).
+   ========================================================================= */
 const STORAGE_KEY = 'codex-do-tempo:state';
+const BACKUP_PREFIX = 'codex-do-tempo:backup:';
+const MAX_BACKUPS = 5;
+const DB_NAME = 'codexDoTempoDB';
+const DB_STORE = 'kv';
+const STATE_VERSION = 1;
+
+let dbPromise = null;
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    if(!('indexedDB' in window)){ resolve(null); return; }
+    try{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        if(!req.result.objectStoreNames.contains(DB_STORE)){
+          req.result.createObjectStore(DB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    }catch(e){ resolve(null); }
+  });
+  return dbPromise;
+}
+
+async function idbGet(key){
+  const db = await openDB();
+  if(!db) return null;
+  return new Promise(resolve => {
+    try{
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+
+async function idbSet(key, value){
+  const db = await openDB();
+  if(!db) return false;
+  return new Promise(resolve => {
+    try{
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    }catch(e){ resolve(false); }
+  });
+}
+
+function rotateBackup(payloadStr){
+  try{
+    localStorage.setItem(BACKUP_PREFIX + Date.now(), payloadStr);
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_PREFIX)).sort();
+    while(keys.length > MAX_BACKUPS){
+      localStorage.removeItem(keys.shift());
+    }
+  }catch(e){ /* quota cheia ou indisponível: ignora, backup é best-effort */ }
+}
+
+function newestBackup(){
+  try{
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_PREFIX)).sort();
+    if(!keys.length) return null;
+    return localStorage.getItem(keys[keys.length - 1]);
+  }catch(e){ return null; }
+}
+
+async function persistSave(stateObj){
+  const payload = JSON.stringify(Object.assign({}, stateObj, { _savedAt: Date.now(), _v: STATE_VERSION }));
+  let ok = false;
+
+  try{ localStorage.setItem(STORAGE_KEY, payload); ok = true; }
+  catch(e){ console.warn('localStorage indisponível:', e); }
+
+  try{ if(await idbSet(STORAGE_KEY, payload)) ok = true; }
+  catch(e){ console.warn('IndexedDB indisponível:', e); }
+
+  // compatibilidade com o ambiente de artifacts do Claude, se existir
+  if(window.storage && typeof window.storage.set === 'function'){
+    try{ await window.storage.set(STORAGE_KEY, payload, false); ok = true; }
+    catch(e){ /* fora do ambiente Claude: ignora */ }
+  }
+
+  if(ok) rotateBackup(payload);
+  return ok;
+}
+
+function parseCandidate(raw){
+  if(!raw) return null;
+  try{
+    const parsed = JSON.parse(raw);
+    if(parsed && typeof parsed === 'object') return parsed;
+  }catch(e){ /* dado corrompido, descarta este candidato */ }
+  return null;
+}
+
+async function persistLoad(){
+  const candidates = [];
+
+  candidates.push(parseCandidate(safeLocalStorageGet(STORAGE_KEY)));
+
+  try{ candidates.push(parseCandidate(await idbGet(STORAGE_KEY))); }
+  catch(e){ candidates.push(null); }
+
+  if(window.storage && typeof window.storage.get === 'function'){
+    try{
+      const res = await window.storage.get(STORAGE_KEY, false);
+      candidates.push(parseCandidate(res && res.value));
+    }catch(e){ /* fora do ambiente Claude: ignora */ }
+  }
+
+  let valid = candidates.filter(Boolean);
+
+  if(valid.length === 0){
+    // todas as fontes principais falharam ou estão vazias: tenta o backup mais recente
+    const backup = parseCandidate(newestBackup());
+    if(backup) valid = [backup];
+  }
+
+  if(valid.length === 0) return null;
+
+  valid.sort((a,b) => (b._savedAt||0) - (a._savedAt||0));
+  return valid[0];
+}
+
+function safeLocalStorageGet(key){
+  try{ return localStorage.getItem(key); }
+  catch(e){ return null; }
+}
+
+function debounce(fn, wait){
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+function toast(msg, ms=2200){
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), ms);
+}
 
 let state = {
   campaignName: '',
@@ -494,30 +701,83 @@ function normalizeTime(){
 async function save(){
   try{
     statusMsg.textContent = 'salvando...';
-    const res = await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
-    if(!res){ statusMsg.textContent = 'falha ao salvar'; return; }
-    statusMsg.textContent = 'salvo';
-    setTimeout(() => { if(statusMsg.textContent === 'salvo') statusMsg.textContent=''; }, 1200);
+    const ok = await persistSave(state);
+    if(!ok){
+      statusMsg.textContent = 'falha ao salvar';
+      toast('não foi possível salvar neste navegador (armazenamento bloqueado ou cheio)');
+      return;
+    }
+    const now = new Date();
+    statusMsg.textContent = `salvo às ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }catch(e){
     console.error(e);
     statusMsg.textContent = 'erro ao salvar';
   }
 }
 
+const debouncedSave = debounce(save, 350);
+
 async function load(){
   try{
     statusMsg.textContent = 'carregando...';
-    const res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value){
-      const parsed = JSON.parse(res.value);
-      state = Object.assign(state, parsed);
+    const parsed = await persistLoad();
+    if(parsed){
+      state = Object.assign({ campaignName:'', day:1, hour:8, minute:0, events:[] }, parsed);
       if(!Array.isArray(state.events)) state.events = [];
     }
     statusMsg.textContent = '';
   }catch(e){
+    console.error(e);
     statusMsg.textContent = '';
+    toast('não foi possível carregar dados salvos anteriormente');
   }
   renderAll();
+}
+
+function exportBackup(){
+  try{
+    const payload = JSON.stringify(Object.assign({}, state, { _savedAt: Date.now(), _v: STATE_VERSION }), null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const safeName = (state.campaignName || 'codex-do-tempo').trim().replace(/[^a-z0-9-_]+/gi, '_').toLowerCase() || 'codex-do-tempo';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeName}-backup.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast('backup exportado — envie o arquivo para o outro dispositivo e importe lá');
+  }catch(e){
+    console.error(e);
+    toast('não foi possível exportar o backup');
+  }
+}
+
+function importBackupFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try{
+      parsed = JSON.parse(reader.result);
+    }catch(e){
+      toast('arquivo inválido: não é um backup do Codex do Tempo');
+      return;
+    }
+    if(!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.events)){
+      toast('arquivo inválido: formato de backup não reconhecido');
+      return;
+    }
+    if(!confirm('Importar este backup vai substituir os dados atuais neste dispositivo. Continuar?')) return;
+    state = Object.assign({ campaignName:'', day:1, hour:8, minute:0, events:[] }, parsed);
+    if(!Array.isArray(state.events)) state.events = [];
+    renderAll();
+    save();
+    toast('backup importado com sucesso');
+  };
+  reader.onerror = () => toast('não foi possível ler o arquivo selecionado');
+  reader.readAsText(file);
 }
 
 function advance(totalMinutes){
@@ -567,10 +827,11 @@ $('applyManual').addEventListener('click', () => {
   save();
 });
 
-$('campaignName').addEventListener('change', () => {
+$('campaignName').addEventListener('input', () => {
   state.campaignName = $('campaignName').value;
-  save();
+  debouncedSave();
 });
+$('campaignName').addEventListener('blur', () => save());
 
 $('logAddBtn').addEventListener('click', addLogEntry);
 $('logInput').addEventListener('keydown', e => { if(e.key === 'Enter') addLogEntry(); });
@@ -594,6 +855,23 @@ $('resetBtn').addEventListener('click', () => {
   renderAll();
   save();
 });
+
+$('exportBtn').addEventListener('click', exportBackup);
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  importBackupFile(file);
+  e.target.value = '';
+});
+
+// Rede de segurança: garante que o último estado seja gravado mesmo se a
+// aba/app for fechado logo após uma alteração (comum em Android/iPhone
+// quando o navegador é encerrado pelo sistema).
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden') save();
+});
+window.addEventListener('pagehide', () => save());
+window.addEventListener('beforeunload', () => save());
 
 load();
 </script>
